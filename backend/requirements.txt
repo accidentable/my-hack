@@ -1,0 +1,22 @@
+# Core agent framework
+langgraph>=1.0.0
+langgraph-checkpoint-sqlite>=2.0.0      # HITL resume via SQLite-persisted thread state
+
+# OpenAI SDK (vision + Structured Outputs)
+openai>=1.50.0
+
+# Vector DB
+chromadb>=0.5.0
+
+# API surface (Day 3)
+fastapi>=0.130.0
+uvicorn[standard]>=0.30.0
+python-multipart>=0.0.22                 # POST file upload
+
+# Schema / config
+pydantic>=2.7.0
+pyyaml>=6.0
+python-dotenv>=1.0.0
+
+# Image handling (dummy sample generation, validation)
+pillow>=10.0.0

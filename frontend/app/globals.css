@@ -1,0 +1,28 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Pretendard from CDN — `next/font` would be ideal but CDN is one less moving part for a 4-day demo. */
+@import url("https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.css");
+
+html,
+body {
+  background: #ffffff;
+  color: #0f172a;
+  font-feature-settings: "ss01", "cv01";
+}
+
+/* Default focus ring — visible but quiet. */
+:focus-visible {
+  outline: 2px solid #1d4ed8;
+  outline-offset: 2px;
+}
+
+/* Hide scrollbar in stream log without removing scroll. */
+.log-scroll::-webkit-scrollbar {
+  width: 6px;
+}
+.log-scroll::-webkit-scrollbar-thumb {
+  background: #e2e8f0;
+  border-radius: 3px;
+}
