@@ -6,8 +6,6 @@
 카드뉴스·릴스·포스터 등 대고객 콘텐츠를 게시 전에 자동 사전심의하여,
 위반 소지·근거 규정·수정안을 정리하고 **준법관리자는 검토·승인만** 하도록 전환하는 AI Agent.
 
-기준 문서 — `ComplianceLens_기획.md`, `ComplianceLens_아키텍처.md`, `ComplianceLens_프롬프트_README.md`.
-
 ---
 
 ## 핵심 동작
