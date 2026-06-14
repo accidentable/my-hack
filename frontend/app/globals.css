@@ -26,3 +26,50 @@ body {
   background: #e2e8f0;
   border-radius: 3px;
 }
+
+/* ---------------------------------------------------------------------------
+ * Print — Final report uses window.print() ("PDF로 저장")
+ *
+ * Hides everything except #final-report-printable, expands its container,
+ * unlocks any internal scroll boxes so the entire content prints in flow.
+ * ------------------------------------------------------------------------- */
+@media print {
+  body {
+    background: white !important;
+  }
+  /* Hide chrome: site header, footer, history tabs, action buttons. */
+  body > header,
+  body > footer,
+  [data-no-print] {
+    display: none !important;
+  }
+  /* Hide everything on the review page except the final-report section. */
+  main > div > header,
+  main > div > div > aside,
+  main > div > div > div > section:not(#final-report-printable) {
+    display: none !important;
+  }
+  /* Let the printable region expand to full width and break naturally. */
+  main, main > div, main > div > div, main > div > div > div {
+    display: block !important;
+    max-width: none !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    grid-template-columns: none !important;
+  }
+  #final-report-printable {
+    margin-top: 0 !important;
+    border-top: 0 !important;
+    padding-top: 0 !important;
+  }
+  /* Allow long lists to flow across pages. */
+  #final-report-printable .log-scroll,
+  #final-report-printable [class*="overflow"] {
+    max-height: none !important;
+    overflow: visible !important;
+  }
+  /* Avoid breaking a finding card across pages when possible. */
+  #final-report-printable article {
+    break-inside: avoid;
+  }
+}

@@ -35,7 +35,8 @@ def _index_reviews(reviews: list[ReviewInput]) -> dict[str, ReviewInput]:
 
 def finalize_node(state: AgentState) -> AgentState:
     findings = state.get("findings", [])
-    reviews = _index_reviews(state.get("review_inputs", []))
+    review_inputs_list = state.get("review_inputs", [])
+    reviews = _index_reviews(review_inputs_list)
     content_ref = state.get("content_ref", "")
     language = state.get("language", "")
 
@@ -105,5 +106,9 @@ def finalize_node(state: AgentState) -> AgentState:
 
     final = "\n".join(lines).rstrip() + "\n"
     state["final_report_markdown"] = final
+    # Echo review_inputs back so it survives in the checkpointed state and is
+    # visible to the API snapshot (FinalReportView reads from there to render
+    # structured cards instead of parsing markdown).
+    state["review_inputs"] = review_inputs_list
     state["stage"] = "done"
     return state

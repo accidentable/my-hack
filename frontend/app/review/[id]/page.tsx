@@ -1,26 +1,12 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { contentUrl, getState, reportUrl, subscribeStream } from "@/lib/api";
+import { contentUrl, getState, subscribeStream } from "@/lib/api";
 import type { StageEvent, StateSnapshot } from "@/types";
 import { ReviewPanel } from "@/components/ReviewPanel";
 import { OriginalPreview } from "@/components/OriginalPreview";
-
-interface LogEntry {
-  stage: string;
-  msg: string;
-}
-
-const STAGE_LABEL: Record<string, string> = {
-  start: "시작",
-  ingest: "주장 추출",
-  retrieve: "규정 검색",
-  assess: "위반 판정",
-  verify: "근거 검증",
-  generate: "의견서 생성",
-  __interrupt__: "사람 검토 대기",
-  snapshot: "복원",
-};
+import { FinalReportView } from "@/components/FinalReportView";
+import { AgentLog, type LogEntry } from "@/components/AgentLog";
 
 export default function ReviewPage({ params }: { params: { id: string } }) {
   const threadId = params.id;
@@ -39,7 +25,10 @@ export default function ReviewPage({ params }: { params: { id: string } }) {
     const unsub = subscribeStream(threadId, {
       onStage: (e: StageEvent) => {
         if (cancelled) return;
-        setLogs((prev) => [...prev, { stage: e.stage, msg: e.msg }]);
+        setLogs((prev) => [
+          ...prev,
+          { stage: e.stage, msg: e.msg, details: e.details ?? null },
+        ]);
       },
       onSnapshot: (snap) => {
         // Backend's "replay" path — this thread has already run, so per-stage
@@ -47,9 +36,21 @@ export default function ReviewPage({ params }: { params: { id: string } }) {
         // hint in the log so the user knows where the data came from.
         if (cancelled) return;
         setState(snap);
-        setLogs((prev) => (prev.length > 0 ? prev : [
-          { stage: "snapshot", msg: "이전 진행 결과를 복원했습니다" },
-        ]));
+        setLogs((prev) =>
+          prev.length > 0
+            ? prev
+            : [
+                {
+                  stage: "snapshot",
+                  msg: "이전 진행 결과를 복원했습니다",
+                  details: {
+                    findings: snap.findings.length,
+                    awaiting_review: snap.awaiting_review,
+                    retry_count: snap.retry_count ?? 0,
+                  },
+                },
+              ],
+        );
       },
       onAwaitReview: async () => {
         if (cancelled) return;
@@ -138,32 +139,13 @@ export default function ReviewPage({ params }: { params: { id: string } }) {
 
         {/* 우측 · 로그 + 검토 + 결과 (상단 진행 바는 제거 — 로그가 같은 정보를 더 자세히 줌) */}
         <div className="lg:col-span-7">
-          {/* 진행 로그 */}
+          {/* 진행 로그 — 라인 클릭 시 노드별 "생각" 펼침 */}
           <section>
-            <h2 className="text-sm font-medium text-muted">에이전트 로그</h2>
-            <ul className="log-scroll mt-3 max-h-32 space-y-2 overflow-y-auto pr-2">
-              {logs.map((l, i) => {
-                const isRetry =
-                  l.stage === "verify" && l.msg.includes("retry");
-                return (
-                  <li key={i} className="flex items-start gap-3 text-sm">
-                    <span className="mt-1.5 inline-block h-1.5 w-1.5 shrink-0 rounded-full bg-line" />
-                    <div className="min-w-0">
-                      <span className="font-medium text-ink">
-                        {STAGE_LABEL[l.stage] ?? l.stage}
-                      </span>
-                      <span className="ml-2 text-muted">{l.msg}</span>
-                      {isRetry && (
-                        <span className="ml-2 text-xs text-sev-medium">자기수정</span>
-                      )}
-                    </div>
-                  </li>
-                );
-              })}
-              {logs.length === 0 && (
-                <li className="text-sm text-soft">에이전트 시작 대기 중...</li>
-              )}
-            </ul>
+            <div className="mb-3 flex items-end justify-between">
+              <h2 className="text-sm font-medium text-muted">에이전트 로그</h2>
+              <span className="text-xs text-soft">라인 클릭 시 상세 보기</span>
+            </div>
+            <AgentLog logs={logs} maxHeightClass="max-h-[40vh]" />
             {streamError && (
               <p className="mt-3 text-sm text-sev-high">스트림 오류 · {streamError}</p>
             )}
@@ -174,30 +156,8 @@ export default function ReviewPage({ params }: { params: { id: string } }) {
             <ReviewPanel state={state} onResolved={(next) => setState(next)} />
           )}
 
-          {/* 최종 결과 */}
-          {finalized && state && (
-            <section className="mt-10 border-t border-line pt-8">
-              <div className="flex items-end justify-between">
-                <div>
-                  <h2 className="text-xl font-semibold tracking-tight">최종 심의의견서</h2>
-                  <p className="mt-1 text-sm text-muted">
-                    준법관리자 검토를 반영한 결과입니다.
-                  </p>
-                </div>
-                <a
-                  href={reportUrl(threadId)}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="text-sm font-medium text-brand hover:text-brand-hover"
-                >
-                  마크다운으로 열기
-                </a>
-              </div>
-              <pre className="log-scroll mt-6 max-h-[55vh] overflow-y-auto whitespace-pre-wrap rounded-md border border-line bg-bg px-5 py-5 font-sans text-sm leading-relaxed text-ink">
-                {state.final_report_markdown}
-              </pre>
-            </section>
-          )}
+          {/* 최종 결과 — 구조화 렌더링. 원문 마크다운은 보조(복사/다운로드)로만. */}
+          {finalized && state && <FinalReportView state={state} />}
         </div>
       </div>
     </div>

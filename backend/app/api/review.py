@@ -66,6 +66,7 @@ class StateSnapshot(BaseModel):
     hallucinated_ids: list[str]
     claims: list[dict]
     findings: list[dict]
+    review_inputs: list[dict]
     report_markdown: str | None
     final_report_markdown: str | None
     awaiting_review: bool
@@ -118,6 +119,7 @@ def _snapshot(graph_app, thread_id: str) -> StateSnapshot:
         hallucinated_ids=values.get("hallucinated_ids", []),
         claims=values.get("claims", []),
         findings=values.get("findings", []),
+        review_inputs=values.get("review_inputs", []),
         report_markdown=values.get("report_markdown"),
         final_report_markdown=values.get("final_report_markdown"),
         awaiting_review=awaiting,
@@ -223,12 +225,16 @@ async def stream_review(request: Request, thread_id: str) -> StreamingResponse:
 
     def runner():
         try:
-            yield _sse("stage", {"stage": "start", "msg": "에이전트 시작"})
+            yield _sse("stage", {"stage": "start", "msg": "에이전트 시작", "details": None})
             # stream_mode="updates" yields per-node delta dicts: {node_name: state_delta}
             for chunk in graph_app.stream(state, config=cfg, stream_mode="updates"):
                 for node_name, delta in chunk.items():
-                    msg = _stage_message(node_name, delta)
-                    yield _sse("stage", {"stage": node_name, "msg": msg})
+                    payload = _stage_payload(node_name, delta)
+                    yield _sse("stage", {
+                        "stage": node_name,
+                        "msg": payload["msg"],
+                        "details": payload.get("details"),
+                    })
             # If we land here, either: (a) the graph completed without an
             # interrupt (shouldn't happen — finalize is interrupt_before), or
             # (b) we hit the interrupt and the iterator finishes.
@@ -250,20 +256,96 @@ async def stream_review(request: Request, thread_id: str) -> StreamingResponse:
     return StreamingResponse(runner(), media_type="text/event-stream")
 
 
-def _stage_message(node_name: str, delta: dict) -> str:
+def _stage_payload(node_name: str, delta: dict) -> dict:
+    """Return {"msg": short summary, "details": {…}}.
+
+    ``details`` is the node's "thinking" — what the agent actually saw at this
+    step. UI renders it as an expandable section under the log line.
+    Keys are stable so the frontend can render typed views per node.
+    """
     if node_name == "ingest":
-        return f"주장 {len(delta.get('claims', []))}건 추출"
+        claims = delta.get("claims", []) or []
+        details = {
+            "language": delta.get("language") or "",
+            "model": "OPENAI_MODEL_INGEST (vision)",
+            "claims": [
+                {
+                    "id": c.get("id"),
+                    "modality": c.get("modality"),
+                    "text_original": c.get("text_original"),
+                    "text_ko": c.get("text_ko"),
+                }
+                for c in claims
+            ],
+        }
+        return {"msg": f"주장 {len(claims)}건 추출", "details": details}
+
     if node_name == "retrieve":
-        return f"규정 {len(delta.get('regulations', []))}건 검색"
+        regs = delta.get("regulations", []) or []
+        details = {
+            "backend": "Chroma (text-embedding-3-small) + 폴백",
+            "top_k": len(regs),
+            "regulations": [
+                {"article_id": r.get("article_id"), "title": r.get("title")}
+                for r in regs
+            ],
+        }
+        return {"msg": f"규정 {len(regs)}건 검색", "details": details}
+
     if node_name == "assess":
-        return f"위반 후보 {len(delta.get('findings', []))}건 판정 (규칙 + LLM)"
+        findings = delta.get("findings", []) or []
+        by_source = {"rule": 0, "llm": 0}
+        for f in findings:
+            src = f.get("source")
+            if src in by_source:
+                by_source[src] += 1
+        details = {
+            "total": len(findings),
+            "by_source": by_source,
+            "retry_attempt": (delta.get("retry_count") or 0),
+            "model": "OPENAI_MODEL_ASSESS + rules.yaml",
+        }
+        return {
+            "msg": f"위반 후보 {len(findings)}건 판정 (규칙 {by_source['rule']} + LLM {by_source['llm']})",
+            "details": details,
+        }
+
     if node_name == "verify":
-        if delta.get("verify_passed"):
-            return "근거 조항 검증 통과"
-        return f"환각 의심 폐기·재판정 (retry={delta.get('retry_count')})"
+        passed = bool(delta.get("verify_passed"))
+        hallucinated = list(delta.get("hallucinated_ids", []) or [])
+        retry = delta.get("retry_count")
+        findings = delta.get("findings", []) or []
+        details = {
+            "passed": passed,
+            "verified_count": sum(1 for f in findings if f.get("verified")),
+            "hallucinated_ids": hallucinated,
+            "retry_count": retry,
+            "next": "generate" if passed else ("assess (자기수정)" if hallucinated else "generate"),
+        }
+        if passed:
+            msg = "근거 조항 검증 통과"
+        else:
+            msg = f"환각 의심 폐기·재판정 (retry={retry})"
+        return {"msg": msg, "details": details}
+
     if node_name == "generate":
-        return "심의의견서 생성 — 사람 검토 대기"
-    return node_name
+        findings = delta.get("findings", []) or []
+        by_sev = {"high": 0, "medium": 0, "low": 0}
+        for f in findings:
+            sev = f.get("severity")
+            if sev in by_sev:
+                by_sev[sev] += 1
+        details = {
+            "findings_after_dedup": len(findings),
+            "by_severity": by_sev,
+            "report_chars": len(delta.get("report_markdown") or ""),
+        }
+        return {
+            "msg": "심의의견서 생성 — 사람 검토 대기",
+            "details": details,
+        }
+
+    return {"msg": node_name, "details": None}
 
 
 @router.post("/{thread_id}/resume", response_model=StateSnapshot)

@@ -42,6 +42,7 @@ export interface StateSnapshot {
   hallucinated_ids: string[];
   claims: Claim[];
   findings: Finding[];
+  review_inputs: ReviewInput[];
   report_markdown: string | null;
   final_report_markdown: string | null;
   awaiting_review: boolean;
@@ -57,6 +58,9 @@ export interface StartResponse {
 export interface StageEvent {
   stage: string;        // "ingest" | "retrieve" | "assess" | "verify" | "generate" | "__interrupt__" | "start"
   msg: string;
+  /** Node-specific "thinking" — keys vary by stage. Rendered in the
+   *  expandable details under each log line. */
+  details?: Record<string, unknown> | null;
 }
 
 /** SSE await_review event — fired once when the graph pauses for HITL. */
