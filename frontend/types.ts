@@ -37,6 +37,7 @@ export interface ReviewInput {
 export interface StateSnapshot {
   thread_id: string;
   stage: string | null;
+  language: string;
   verify_passed: boolean | null;
   retry_count: number | null;
   hallucinated_ids: string[];

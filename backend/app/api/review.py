@@ -61,6 +61,7 @@ class ThreadMeta(BaseModel):
 class StateSnapshot(BaseModel):
     thread_id: str
     stage: str | None
+    language: str
     verify_passed: bool | None
     retry_count: int | None
     hallucinated_ids: list[str]
@@ -114,6 +115,7 @@ def _snapshot(graph_app, thread_id: str) -> StateSnapshot:
     return StateSnapshot(
         thread_id=thread_id,
         stage=values.get("stage"),
+        language=values.get("language", ""),
         verify_passed=values.get("verify_passed"),
         retry_count=values.get("retry_count"),
         hallucinated_ids=values.get("hallucinated_ids", []),
