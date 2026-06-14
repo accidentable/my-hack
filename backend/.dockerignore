@@ -1,0 +1,15 @@
+.venv
+__pycache__
+*.pyc
+*.pyo
+.pytest_cache
+.mypy_cache
+.ruff_cache
+.env
+.env.local
+.chroma
+.checkpoints.sqlite
+data/uploads/*
+!data/uploads/.gitkeep
+tests
+*.md

@@ -8,5 +8,8 @@ const nextConfig = {
   // 영향. 우리 useEffect들은 외부 부수효과 안전한 cleanup을 이미 갖추고
   // 있어 Strict Mode가 잡아줄 신규 버그는 없습니다.)
   reactStrictMode: false,
+  // Docker 배포용 슬림 출력: .next/standalone에 자급자족 가능한 server.js + 최소
+  // node_modules만 모아줘서 최종 이미지 크기를 ~1GB → ~150MB로 줄인다.
+  output: "standalone",
 };
 export default nextConfig;

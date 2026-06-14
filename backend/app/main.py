@@ -5,6 +5,7 @@ Run:
 """
 from __future__ import annotations
 
+import os
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
@@ -36,10 +37,14 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(title="ComplianceLens", version="0.3.0", lifespan=lifespan)
 
-# Dev CORS — Next.js dev server runs on :3000. Tightened in prod via env later.
+# CORS origins: comma-separated ALLOWED_ORIGINS env wins; falls back to dev defaults.
+# In prod behind a single-origin reverse proxy (Nginx → CloudFront), browser calls
+# are same-origin and CORS isn't exercised — set ALLOWED_ORIGINS only when you need
+# cross-origin (e.g. Vercel frontend + EC2 backend on different hosts).
+_allowed = os.getenv("ALLOWED_ORIGINS", "http://localhost:3000,http://127.0.0.1:3000")
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000", "http://127.0.0.1:3000"],
+    allow_origins=[o.strip() for o in _allowed.split(",") if o.strip()],
     allow_methods=["GET", "POST", "OPTIONS"],
     allow_headers=["*"],
 )

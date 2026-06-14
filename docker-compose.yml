@@ -1,0 +1,67 @@
+# EC2 단일 인스턴스 배포용 compose.
+#
+# 토폴로지:
+#   클라이언트(HTTPS) → CloudFront → EC2:80 → Nginx
+#                                              ├─ /        → frontend(Next.js):3000
+#                                              ├─ /api/    → backend(FastAPI):8000
+#                                              └─ /api/.../stream → backend (SSE, no buffer)
+#
+# 영속 상태(EC2 재부팅 시 잃지 않아야 할 것):
+#   - uploads:        업로드된 카드뉴스 이미지/영상
+#   - chroma:         규정 임베딩 벡터 DB
+#   - checkpoints:    LangGraph HITL 체크포인트 SQLite
+#
+# OPENAI_API_KEY는 EC2 호스트의 .env 파일에서 주입한다 (compose가 자동 로드).
+
+services:
+  backend:
+    build:
+      context: ./backend
+    image: compliancelens-backend:latest
+    restart: unless-stopped
+    environment:
+      OPENAI_API_KEY: ${OPENAI_API_KEY}
+      OPENAI_MODEL_ASSESS: ${OPENAI_MODEL_ASSESS:-gpt-5.4}
+      OPENAI_MODEL_INGEST: ${OPENAI_MODEL_INGEST:-gpt-5.4-mini}
+      COMPLIANCELENS_MOCK_LLM: ${COMPLIANCELENS_MOCK_LLM:-0}
+      # 같은 origin(Nginx)에서 서빙하므로 CORS는 사실상 필요 없지만,
+      # 디버깅 편의를 위해 CloudFront 도메인을 허용 리스트로 명시.
+      ALLOWED_ORIGINS: ${ALLOWED_ORIGINS:-http://localhost}
+      # checkpoint DB를 볼륨 안으로 옮긴다 (config.py가 CHECKPOINT_DB env 존중).
+      # 경로는 BACKEND_ROOT 기준 상대 — config.py가 BACKEND_ROOT/value 로 계산.
+      CHECKPOINT_DB: .checkpoints/checkpoints.sqlite
+    volumes:
+      - uploads:/app/data/uploads
+      - chroma:/app/.chroma
+      - checkpoints:/app/.checkpoints
+    expose:
+      - "8000"
+
+  frontend:
+    build:
+      context: ./frontend
+      args:
+        # 같은 origin이라 빈 문자열 → fetch가 /api/... 상대경로로 나감
+        NEXT_PUBLIC_BACKEND_URL: ""
+    image: compliancelens-frontend:latest
+    restart: unless-stopped
+    expose:
+      - "3000"
+    depends_on:
+      - backend
+
+  nginx:
+    image: nginx:1.27-alpine
+    restart: unless-stopped
+    ports:
+      - "80:80"
+    volumes:
+      - ./deploy/nginx.conf:/etc/nginx/nginx.conf:ro
+    depends_on:
+      - frontend
+      - backend
+
+volumes:
+  uploads:
+  chroma:
+  checkpoints:
